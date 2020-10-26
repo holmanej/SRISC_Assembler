@@ -64,8 +64,8 @@ namespace SRISC_Assembler
         {
             for (int i = 112; i <= 115; i++)
             {
-                MemObj reg = vars.VarAt(i) ?? new MemObj("", 1, 0);
-                if (reg.Active == false || reg.Location == 0)
+                MemObj reg = vars.VarAt(i) ?? new MemObj("", 1, 0) { Active = false };
+                if (reg.Active == false)
                 {
                     return i;
                 }
@@ -89,13 +89,13 @@ namespace SRISC_Assembler
             return false;
         }
 
-        public static bool CacheVariable(this List<MemObj> vars, string name)
+        public static bool CacheVariable(this List<MemObj> vars, string name, bool target)
         {
             List<MemObj> registers = vars.FindAll(v => v.Location >= 112);
             List<MemObj> memory = vars.FindAll(v => v.Location <= 111);
             int regLoc = vars.Location(name);
 
-            if (vars.Exists(name))
+            if (vars.Exists(name) && (vars.Status(name) || target))
             {
                 vars.Var(name).LastModified = 0;
                 if (regLoc >= 112)
@@ -111,15 +111,16 @@ namespace SRISC_Assembler
                         VariableManager.Code.Add("load r" + (regLoc - 112).ToString() + ", " + varLoc.ToString());  // "load regLoc varLoc"
                     }
                     vars.Var(name).Location = regLoc;   // move var to registers
-                    vars.Var(name).Active = true;   // activate register
                     vars.Var(name).LastModified = 0;   // reset modified
+                    if (target) vars.Var(name).Active = true;
 
                     return true;
                 }
             }
             else
             {
-                Debug.WriteLine("var not found");
+                if (vars.Exists(name)) Debug.WriteLine(name + " unassigned");
+                else Debug.WriteLine(name + " not found");
                 return false;
             }
         }
@@ -133,6 +134,7 @@ namespace SRISC_Assembler
             loc = vars.FindReg();
             if (loc != 0)
             {
+                vars.Add(new MemObj("imm", 1, loc));
                 return true;
             }
             else
@@ -142,6 +144,7 @@ namespace SRISC_Assembler
                     loc = registers.Last().Location;    // find oldest modified register
                     VariableManager.Code.Add("store r" + (loc - 112).ToString() + ", " + memLoc.ToString()); // "store regLoc memLoc"
                     vars.VarAt(loc).Location = memLoc;
+                    vars.Add(new MemObj("imm", 1, loc));
                     return true;
                 }
                 else
@@ -163,7 +166,7 @@ namespace SRISC_Assembler
             //Match { byte a }
             delegate (string line)
             {
-                Regex pattern = new Regex(@"^byte\s*([A-z]*)", RegexOptions.Compiled);
+                Regex pattern = new Regex(@"^byte\s*([A-z]+)", RegexOptions.Compiled);
                 Match match = pattern.Match(line);
                 string varName = match.Groups[1].Value;
                 if (pattern.IsMatch(line) && !Variables.Exists(varName))
@@ -177,14 +180,35 @@ namespace SRISC_Assembler
                     return false;
                 }
             },
+
+            //Match { a++ | a-- }
+            delegate (string line)
+            {
+                Regex pattern = new Regex(@"^\s*([A-z]+)([+|-]{2})", RegexOptions.Compiled);
+                Match match = pattern.Match(line);
+                // g[1]:a, g[2]:++/--
+                string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
+                if (g[0] == line && Variables.CacheVariable(g[1], false))
+                {
+                    string opr = g[2] == "++" ? opr = "inc" : opr = "dec";
+                    string aLoc = " r" + (Variables.Location(g[1]) - 112).ToString();
+                    Code.Add(opr + aLoc);
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            },
+
             //Match { a = # }
             delegate (string line)
             {
-                Regex pattern = new Regex(@"^(?:byte)?\s*([A-z]*)\s*[=]\s*(.[0-9]+)", RegexOptions.Compiled);
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*[=]\s*(\S?[0-9]+)", RegexOptions.Compiled);
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:#
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
-                if (g[0] == line && Variables.CacheVariable(g[1]))
+                if (g[0] == line && Variables.CacheVariable(g[1], true))
                 {
                     string aLoc = " r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
                     Code.Add("imm" + aLoc + g[2]);
@@ -199,11 +223,11 @@ namespace SRISC_Assembler
             //Match { a = b }
             delegate (string line)
             {
-                Regex pattern = new Regex(@"^(?:byte)?\s*([A-z]*)\s*[=]\s*([A-z]*)", RegexOptions.Compiled);
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*[=]\s*([A-z]+)", RegexOptions.Compiled);
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:b
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
-                if (g[0] == line && Variables.CacheVariable(g[1]))
+                if (g[0] == line && Variables.CacheVariable(g[1], true) && Variables.Status(g[2]))
                 {
                     string aLoc = " r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
                     int bLoc = Variables.Location(g[2]);
@@ -224,21 +248,134 @@ namespace SRISC_Assembler
                 }
             },
 
+            //Match { a = ~b }
+            delegate (string line)
+            {
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*[=]\s*[~]([A-z]+)", RegexOptions.Compiled);
+                Match match = pattern.Match(line);
+                // g[1]:a, g[2]:b
+                string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
+                if (g[0] == line && Variables.CacheVariable(g[1], true) && Variables.CacheVariable(g[2], false))
+                {
+                    string aLoc = "r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
+                    string bLoc = "r" + (Variables.Location(g[2]) - 112).ToString();
+                    Code.Add("inv " + aLoc + bLoc);
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            },
+
+            //Match { a ? # }
+            delegate (string line)
+            {
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*(\S+)\s*(\S?[0-9]+)", RegexOptions.Compiled);
+                Match match = pattern.Match(line);
+                // g[1]:a, g[2]:?, g[3]:#
+                string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
+                if (g[0] == line && Variables.CacheVariable(g[1], false) && Program.CmpOps.ContainsKey(g[2]) && Variables.ReserveRegister(out int literal))
+                {
+                    string aLoc = "r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
+                    string nLoc = "r" + (literal - 112).ToString();
+                    string cmp = Program.CmpOps[g[2]] + " ";
+                    Code.Add("imm " + nLoc + ", " + g[3]);
+                    Code.Add(cmp + aLoc + nLoc);
+
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            },
+
+            //Match { a ? b }
+            delegate (string line)
+            {
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*(\S+)\s*([A-z]+)", RegexOptions.Compiled);
+                Match match = pattern.Match(line);
+                // g[1]:a, g[2]:?, g[3]:b
+                string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
+                if (g[0] == line && Variables.CacheVariable(g[1], false) && Program.CmpOps.ContainsKey(g[2]) && Variables.CacheVariable(g[3], false))
+                {
+                    string aLoc = "r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
+                    string bLoc = "r" + (Variables.Location(g[3]) - 112).ToString();
+                    string cmp = Program.CmpOps[g[2]] + " ";
+                    Code.Add(cmp + aLoc + bLoc);
+
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            },
+
+            //Match { a = # @ # }
+            delegate (string line)
+            {
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*[=]\s*(\S?[0-9]+)\s*(\S+)\s*(\S?[0-9]+)", RegexOptions.Compiled);
+                Match match = pattern.Match(line);
+                // g[1]:a, g[2]:#, g[3]:@, g[4]:#
+                string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
+                if (g[0] == line && !g.Contains("") && Variables.CacheVariable(g[1], true) && Variables.ReserveRegister(out int nA) && Program.AssignOps.ContainsKey(g[3]) && Variables.ReserveRegister(out int nB))
+                {
+                    string aLoc = "r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
+                    string naLoc = "r" + (nA - 112).ToString() + ", ";
+                    string nbLoc = "r" + (nB - 112).ToString();
+                    string opr = Program.AssignOps[g[3]] + " ";
+                    Code.Add("imm " + naLoc + ", " + g[2]);
+                    Code.Add("imm " + nbLoc + ", " + g[4]);
+                    Code.Add(opr + aLoc + naLoc + nbLoc);
+
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            },
+
             //Match { a = b @ # }
             delegate (string line)
             {
-                Regex pattern = new Regex(@"^(?:byte)?\s*([A-z]*)\s*[=]\s*([A-z]*)\s*(\S*)\s*(.[0-9]*)", RegexOptions.Compiled);
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*[=]\s*([A-z]+)\s*(\S+)\s*(\S?[0-9]+)", RegexOptions.Compiled);
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:b, g[3]:@, g[4]:#
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
-                if (g[0] == line && !g.Contains("") && Variables.CacheVariable(g[1]) && Variables.CacheVariable(g[2]) && Program.ALU_Symbols.ContainsKey(g[3]) && Variables.ReserveRegister(out int literal))
+                if (g[0] == line && !g.Contains("") && Variables.CacheVariable(g[1], true) && Variables.CacheVariable(g[2], false) && Program.AssignOps.ContainsKey(g[3]) && Variables.ReserveRegister(out int n))
                 {
                     string aLoc = "r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
                     string bLoc = "r" + (Variables.Location(g[2]) - 112).ToString() + ", ";
-                    string nLoc = "r" + (literal - 112).ToString();
-                    string opr = Program.ALU_Symbols[g[3]] + " ";
+                    string nLoc = "r" + (n - 112).ToString();
+                    string opr = Program.AssignOps[g[3]] + " ";
                     Code.Add("imm " + nLoc + ", " + g[4]);
                     Code.Add(opr + aLoc + bLoc + nLoc);
+
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            },
+
+            //Match { a = b @ c }
+            delegate (string line)
+            {
+                Regex pattern = new Regex(@"^\s*(?:byte)?\s*([A-z]+)\s*[=]\s*([A-z]+)\s*(\S+)\s*([A-z]+)", RegexOptions.Compiled);
+                Match match = pattern.Match(line);
+                // g[1]:a, g[2]:b, g[3]:@, g[4]:c
+                string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
+                if (g[0] == line && !g.Contains("") && Variables.CacheVariable(g[1], true) && Variables.CacheVariable(g[2], false) && Program.AssignOps.ContainsKey(g[3]) && Variables.CacheVariable(g[4], false))
+                {
+                    string aLoc = " r" + (Variables.Location(g[1]) - 112).ToString() + ", ";
+                    string bLoc = "r" + (Variables.Location(g[2]) - 112).ToString() + ", ";
+                    string cLoc = "r" + (Variables.Location(g[4]) - 112).ToString();
+                    string opr = Program.AssignOps[g[3]];
+                    Code.Add(opr + aLoc + bLoc + cLoc);
 
                     return true;
                 }
@@ -256,6 +393,7 @@ namespace SRISC_Assembler
             Debug.WriteLine("\r\nline: " + line);
             Code = new List<string>();
             Handlers.ForEach(h => { h(line); });
+            Variables.RemoveAll(v => v.Name == "imm");
             Variables.FindAll(v => v.Location >= 112).ForEach(v => v.LastModified++);
 
             Debug.WriteLine("Variables: ");

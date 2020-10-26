@@ -43,24 +43,24 @@ namespace SRISC_Assembler
             { "br", Branch }
         };
 
-        public static Dictionary<string, string> ALU_Symbols = new Dictionary<string, string>()
+        public static Dictionary<string, string> AssignOps = new Dictionary<string, string>()
         {
             { "+", "add" }, 
             { "-", "sub" },
             { "&", "and" }, 
             { "|", "or" }, 
             { "^", "xor" },
-            { "~", "inv" },
             { "<<", "sll" },
-            { ">>", "srl" },
-            { "++", "inc" },
-            { "--", "dec" },
-            { "u<", "ult" }, 
-            { "<" ,"slt" }, 
-            { "==", "equ" },
-            { "=z", "eqz" } 
+            { ">>", "srl" }
         };
-        
+
+        public static Dictionary<string, string> CmpOps = new Dictionary<string, string>()
+        {            
+            { "u<", "ult" },
+            { "<" ,"slt" },
+            { "==", "equ" }
+        };
+
         static List<string> Insns = new List<string>();
         static Dictionary<string, int> Labels = new Dictionary<string, int>();
 
@@ -68,12 +68,20 @@ namespace SRISC_Assembler
         {
             List<string> nah;
             VariableManager.Handler("byte a = 1", out nah);
+            VariableManager.Handler("a++", out nah);
+            VariableManager.Handler("a--", out nah);            
             VariableManager.Handler("byte b = 2", out nah);
+            VariableManager.Handler("a = ~b", out nah);
+            VariableManager.Handler("b < a", out nah);
+            VariableManager.Handler("b == 2", out nah);
+            VariableManager.Handler("b < 2", out nah);
             VariableManager.Handler("byte c = 3", out nah);
             VariableManager.Handler("byte d = 4", out nah);
             VariableManager.Handler("byte e = 5", out nah);
             VariableManager.Handler("byte b = a", out nah);
             VariableManager.Handler("b = a + 5", out nah);
+            VariableManager.Handler("c = 2 + 5", out nah);
+            VariableManager.Handler("c = a + d", out nah);
 
             string path = "testprogram.txt";
             string[] code = File.ReadAllLines(path);
@@ -146,11 +154,11 @@ namespace SRISC_Assembler
                 case "and":     target = true; opsel = "0010"; break;
                 case "or":      target = true; opsel = "0011"; break;
                 case "xor":     target = true; opsel = "0100"; break;
-                case "invert":  target = true; opsel = "0101"; break;
+                case "inv":     target = true; opsel = "0101"; break;
                 case "sll":     target = true; opsel = "0110"; break;
                 case "srl":     target = true; opsel = "0111"; break;
-                case "inc":     target = true; opsel = "1000"; break;
-                case "dec":     target = true; opsel = "1001"; break;
+                case "inc":     target = false; opsel = "1000"; break;
+                case "dec":     target = false; opsel = "1001"; break;
                 case "ind":     target = false; opsel = "1010"; break;
                 case "ult":     target = false; opsel = "1011"; break;
                 case "slt":     target = false; opsel = "1100"; break;
