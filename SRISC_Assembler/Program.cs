@@ -11,7 +11,13 @@ namespace SRISC_Assembler
 {
     static class Program
     {
-        static Dictionary<string, Func<string, string>> Lexicon = new Dictionary<string, Func<string, string>>()
+        delegate V MyDelegate<T, U, V>(T input, out U output);
+        static Dictionary<string, MyDelegate<string, List<string>, bool>> Lexicon = new Dictionary<string, MyDelegate<string, List<string>, bool>>()
+        {
+            { "byte", VariableManager.Handler }
+        };
+
+        static Dictionary<string, Func<string, string>> Mnemonics = new Dictionary<string, Func<string, string>>()
         {
             { "imm", Imm },
             { "add", ALU },
@@ -19,7 +25,7 @@ namespace SRISC_Assembler
             { "and", ALU },
             { "or", ALU },
             { "xor", ALU },
-            { "invert", ALU },
+            { "inv", ALU },
             { "sll", ALU },
             { "srl", ALU },
             { "inc", ALU },
@@ -36,14 +42,39 @@ namespace SRISC_Assembler
             { "write", Mem },
             { "br", Branch }
         };
-        static List<string> ALU_Symbols = new List<string>()
-        { "+", "-", "&", "|", "^", "~", "<<", ">>", "++", "--", "ult", "slt", "equ", "eqz" };
+
+        public static Dictionary<string, string> ALU_Symbols = new Dictionary<string, string>()
+        {
+            { "+", "add" }, 
+            { "-", "sub" },
+            { "&", "and" }, 
+            { "|", "or" }, 
+            { "^", "xor" },
+            { "~", "inv" },
+            { "<<", "sll" },
+            { ">>", "srl" },
+            { "++", "inc" },
+            { "--", "dec" },
+            { "u<", "ult" }, 
+            { "<" ,"slt" }, 
+            { "==", "equ" },
+            { "=z", "eqz" } 
+        };
         
         static List<string> Insns = new List<string>();
         static Dictionary<string, int> Labels = new Dictionary<string, int>();
 
         static void Main()
         {
+            List<string> nah;
+            VariableManager.Handler("byte a = 1", out nah);
+            VariableManager.Handler("byte b = 2", out nah);
+            VariableManager.Handler("byte c = 3", out nah);
+            VariableManager.Handler("byte d = 4", out nah);
+            VariableManager.Handler("byte e = 5", out nah);
+            VariableManager.Handler("byte b = a", out nah);
+            VariableManager.Handler("b = a + 5", out nah);
+
             string path = "testprogram.txt";
             string[] code = File.ReadAllLines(path);
             int labelCnt = 0;
@@ -62,7 +93,7 @@ namespace SRISC_Assembler
                 else
                 {
                     // Convert basic insn to binary
-                    Insns.Add(Lexicon[line.Split(' ')[0]](line));
+                    Insns.Add(Mnemonics[line.Split(' ')[0]](line));
 
                     // Increment age of registers
                     //for (int r = 112; r <= 115; r++)
@@ -79,7 +110,15 @@ namespace SRISC_Assembler
             Labels.ToList().ForEach(o => Debug.WriteLine(o.Key + ": " + o.Value));
         }
 
-
+        public static string ConvertLiteral(string radix, string value)
+        {
+            return radix switch
+            {
+                "h" => Convert.ToString(Convert.ToInt32(value, 16), 2).PadLeft(8, '0'), // hex
+                "b" => Convert.ToString(Convert.ToInt32(value, 2), 2).PadLeft(8, '0'),  // bin
+                _ => Convert.ToString(Convert.ToInt32(value), 2).PadLeft(8, '0'),       // dec
+            };
+        }
 
         static string Imm(string line)
         {
@@ -89,13 +128,8 @@ namespace SRISC_Assembler
             insn += DecodeR(r);
 
             string radix = line.Split(',')[1].Substring(1, 1);
-            switch (radix)
-            {
-                case "d": insn += Convert.ToString(Convert.ToByte(line.Split(',')[1].Substring(2)), 2).PadLeft(8, '0'); break;
-                case "h": insn += Convert.ToString(Convert.ToByte(line.Split(',')[1].Substring(2), 16), 2).PadLeft(8, '0'); break;
-                default: insn += Convert.ToString(Convert.ToByte(line.Split(',')[1].Substring(2), 2), 2).PadLeft(8, '0'); break;
-            }
-
+            string value = line.Split(',')[1].Substring(2);
+            insn += ConvertLiteral(radix, value);
             return insn;
         }
 

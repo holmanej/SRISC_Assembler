@@ -11,7 +11,7 @@ sub		target[0..3]	a[0..3]		b[0..3]
 and		target[0..3]	a[0..3]		b[0..3]
 or		target[0..3]	a[0..3]		b[0..3]
 xor		target[0..3]	a[0..3]		b[0..3]
-invert	target[0..3]	a[0..3]
+inv		target[0..3]	a[0..3]
 sll		target[0..3]	a[0..3]		b[0..3]
 srl		target[0..3]	a[0..3]		b[0..3]
 inc		target[0..3]	a[0..3]
@@ -58,10 +58,10 @@ while
 		byte a;
 			try add 'a' to dict
 			no code
-		byte a = #;
+		byte a = #
 			try add 'a' to dict
 			dreg <= imm #
-		byte a = b;
+		byte a = b
 			try add 'a' to dict
 			dreg <= imm value of b (b stays put)
 		byte a = @ #
