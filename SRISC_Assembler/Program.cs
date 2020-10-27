@@ -69,7 +69,7 @@ namespace SRISC_Assembler
             List<string> nah;
             VariableManager.Handler("byte a = 1", out nah);
             VariableManager.Handler("a++", out nah);
-            VariableManager.Handler("a--", out nah);            
+            VariableManager.Handler("a--", out nah);
             VariableManager.Handler("byte b = 2", out nah);
             VariableManager.Handler("a = ~b", out nah);
             VariableManager.Handler("b < a", out nah);

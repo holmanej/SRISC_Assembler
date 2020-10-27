@@ -50,81 +50,23 @@ while
 
 
 #### Variables (byte)
-* variable dictionary
-* swaps most decrepit register
+* variable list
+* swaps most oldest modified register
 * init done first, optional assign after
 ##### Syntax
 ```
-		byte a;
-			try add 'a' to dict
-			no code
-		byte a = #
-			try add 'a' to dict
-			dreg <= imm #
-		byte a = b
-			try add 'a' to dict
-			dreg <= imm value of b (b stays put)
-		byte a = @ #
-			try add 'a' to dict
-			dreg "temp" <= imm
-			"temp" <= alu "temp"
-		byte a = @ b
-			try add 'a' to dict
-			dreg "temp" <= value of b
-			"temp" <= alu "temp"
-		byte a = # @ #
-			try add 'a' to dict
-			? dreg <= imm of #, #
-			dreg <= alu #, #
-		byte a = b @ #
-			try add 'a' to dict
-			? dreg <= value of b, #
-			dreg <= alu b, #
-		byte a = b @ c
-			try add 'a' to dict
-			? dreg <= value of b, c
-			dreg <= alu b, c
-```	
-##### Procedure
-* Init - breaks syntax into init and then assignment
+		byte a
+		a++
+		a--
+		a ? #
+		a ? b
+		(byte) a = #
+		(byte) a = b
+		(byte) a = ~b
+		(byte) a = # @ #
+		(byte) a = b @ #
+		(byte) a = b @ c
 ```
-      read type, name
-      if name exists
-          error
-      else
-          add var to dict (inactive)
-      end		
-      if '='
-          doAssignment(line.remove(type))
-      end
-```
-* Existing/Assignment
-```
-      read name
-      if exists			
-          if op1 is #
-              imm #
-          else if op1 exists
-              imm value
-          else
-              error - var not found
-          end
-          if '@'
-          symbol = '@'
-              if op2 is #
-                  imm #
-              else if op2 exists
-                  imm value
-              else
-                  error - var not found
-              end
-              alu op
-          end				
-      else
-          error
-      end
-```
-
 #### Ifs
 * code inside placed elsewhere
 * true branches to code and jumps back
