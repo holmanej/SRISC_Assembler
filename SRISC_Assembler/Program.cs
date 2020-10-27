@@ -66,6 +66,8 @@ namespace SRISC_Assembler
 
         static void Main()
         {
+            Stopwatch sw = new Stopwatch();
+            sw.Start();
             List<string> nah;
             VariableManager.Handler("byte a = 1", out nah);
             VariableManager.Handler("a++", out nah);
@@ -82,6 +84,8 @@ namespace SRISC_Assembler
             VariableManager.Handler("b = a + 5", out nah);
             VariableManager.Handler("c = 2 + 5", out nah);
             VariableManager.Handler("c = a + d", out nah);
+            sw.Stop();
+            Debug.WriteLine(sw.Elapsed);
 
             string path = "testprogram.txt";
             string[] code = File.ReadAllLines(path);

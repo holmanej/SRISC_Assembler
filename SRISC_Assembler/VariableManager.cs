@@ -204,7 +204,7 @@ namespace SRISC_Assembler
             //Match { (byte) a = # }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("byte a = #"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("byte a = #");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:#
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -223,7 +223,7 @@ namespace SRISC_Assembler
             //Match { (byte) a = b }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("byte a = b"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("byte a = b");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:b
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -251,7 +251,7 @@ namespace SRISC_Assembler
             //Match { (byte) a = ~b }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("byte a = ~b"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("byte a = ~b");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:b
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -271,7 +271,7 @@ namespace SRISC_Assembler
             //Match { a ? # }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("a ? #"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("a ? #");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:?, g[3]:#
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -294,7 +294,7 @@ namespace SRISC_Assembler
             //Match { a ? b }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("a ? b"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("a ? b");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:?, g[3]:b
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -313,10 +313,10 @@ namespace SRISC_Assembler
                 }
             },
 
-            //Match { a = # @ # }
+            //Match { (byte) a = # @ # }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("byte a = # @ #"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("byte a = # @ #");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:#, g[3]:@, g[4]:#
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -338,10 +338,10 @@ namespace SRISC_Assembler
                 }
             },
 
-            //Match { a = b @ # }
+            //Match { (byte) a = b @ # }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("byte a = b @ #"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("byte a = b @ #");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:b, g[3]:@, g[4]:#
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -362,10 +362,10 @@ namespace SRISC_Assembler
                 }
             },
 
-            //Match { a = b @ c }
+            //Match { (byte) a = b @ c }
             delegate (string line)
             {
-                Regex pattern = new Regex(MakePattern("byte a = b @ c"), RegexOptions.Compiled);
+                Regex pattern = MakeRegex("byte a = b @ c");
                 Match match = pattern.Match(line);
                 // g[1]:a, g[2]:b, g[3]:@, g[4]:c
                 string[] g = match.Groups.Cast<Group>().Select(s => s.Value).ToArray();
@@ -386,6 +386,7 @@ namespace SRISC_Assembler
             }
         };
 
+        public static Dictionary<string, Regex> Expressions = new Dictionary<string, Regex>();
         public static List<string> Code;
 
         public static bool Handler(string line, out List<string> code)
@@ -405,29 +406,37 @@ namespace SRISC_Assembler
             return true;
         }
 
-        public static string MakePattern(string exp)
+        public static Regex MakeRegex(string exp)
         {
-            Dictionary<string, string> Translator = new Dictionary<string, string>()
+            if (Expressions.ContainsKey(exp))
             {
-                { "byte", "(?:byte)?\\s*" },
-                { "x", "([A-z]+)\\s*" },
-                { "#", "(\\S?[0-9]+)\\s*" },
-                { "=", "[=]\\s*" },
-                { "~x", "[~]" },
-                { "@", "(\\S+)\\s*" },
-                { "?", "(\\S+)\\s*" }
-            };
-            Regex letters = new Regex("[A-z]", RegexOptions.Compiled);
-
-            string[] parts = exp.Split(' ');
-            string pattern = "^\\s*";
-            foreach (string s in parts)
-            {
-                string s_r = Translator.ContainsKey(s) ? s : letters.Replace(s, "x");
-                pattern += Translator[s_r];
+                return Expressions[exp];
             }
+            else
+            {
+                Dictionary<string, string> Translator = new Dictionary<string, string>()
+                {
+                    { "byte", "(?:byte)?\\s*" },
+                    { "x", "([a-z]+)\\s*" },
+                    { "#", "(\\S?[0-9abcdef]+)\\s*" },
+                    { "=", "[=]\\s*" },
+                    { "~x", "[~]" },
+                    { "@", "(\\S+)\\s*" },
+                    { "?", "(\\S+)\\s*" }
+                };
+                Regex letters = new Regex("[A-z]", RegexOptions.Compiled);
 
-            return pattern;
+                string[] parts = exp.Split(' ');
+                string pattern = "^\\s*";
+                foreach (string s in parts)
+                {
+                    string s_r = Translator.ContainsKey(s) ? s : letters.Replace(s, "x");
+                    pattern += Translator[s_r];
+                }
+
+                Expressions.Add(exp, new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase));
+                return Expressions[exp];
+            }
         }
     }
 }
