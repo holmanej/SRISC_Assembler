@@ -11,12 +11,6 @@ namespace SRISC_Assembler
 {
     static class Program
     {
-        delegate V MyDelegate<T, U, V>(T input, out U output);
-        static Dictionary<string, MyDelegate<string, List<string>, bool>> Lexicon = new Dictionary<string, MyDelegate<string, List<string>, bool>>()
-        {
-            { "byte", VariableManager.Handler }
-        };
-
         static Dictionary<string, Func<string, string>> Mnemonics = new Dictionary<string, Func<string, string>>()
         {
             { "imm", Imm },
@@ -57,69 +51,107 @@ namespace SRISC_Assembler
         public static Dictionary<string, string> CmpOps = new Dictionary<string, string>()
         {            
             { "u<", "ult" },
-            { "<" ,"slt" },
+            { "<" , "slt" },
             { "==", "equ" }
         };
 
         static List<string> Insns = new List<string>();
         static Dictionary<string, int> Labels = new Dictionary<string, int>();
 
-        static void Main()
+        static int Main(string[] args)
         {
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-            List<string> nah;
-            VariableManager.Handler("byte a = 1", out nah);
-            VariableManager.Handler("a++", out nah);
-            VariableManager.Handler("a--", out nah);
-            VariableManager.Handler("byte b = 2", out nah);
-            VariableManager.Handler("a = ~b", out nah);
-            VariableManager.Handler("b < a", out nah);
-            VariableManager.Handler("b == 2", out nah);
-            VariableManager.Handler("b < 2", out nah);
-            VariableManager.Handler("byte c = 3", out nah);
-            VariableManager.Handler("byte d = 4", out nah);
-            VariableManager.Handler("byte e = 5", out nah);
-            VariableManager.Handler("byte b = a", out nah);
-            VariableManager.Handler("b = a + 5", out nah);
-            VariableManager.Handler("c = 2 + 5", out nah);
-            VariableManager.Handler("c = a + d", out nah);
-            sw.Stop();
-            Debug.WriteLine(sw.Elapsed);
+            {
+                //Stopwatch sw = new Stopwatch();
+                //sw.Start();
+                //List<string> nah;
+                //VariableManager.Handler("byte a = 1", out nah);
+                //VariableManager.Handler("a++", out nah);
+                //VariableManager.Handler("a--", out nah);
+                //VariableManager.Handler("byte b = 2", out nah);
+                //VariableManager.Handler("a = ~b", out nah);
+                //VariableManager.Handler("b < a", out nah);
+                //VariableManager.Handler("b == 2", out nah);
+                //VariableManager.Handler("b < 2", out nah);
+                //VariableManager.Handler("byte c = 3", out nah);
+                //VariableManager.Handler("byte d = 4", out nah);
+                //VariableManager.Handler("byte e = 5", out nah);
+                //VariableManager.Handler("byte b = a", out nah);
+                //VariableManager.Handler("b = a + 5", out nah);
+                //VariableManager.Handler("b = [a] + 5", out nah);
+                //VariableManager.Handler("c = 2 + 5", out nah);
+                //VariableManager.Handler("c = a + d", out nah);
+                //sw.Stop();
+                //Debug.WriteLine(sw.Elapsed);
+            }
 
-            string path = "testprogram.txt";
+            string path;
+            if (args.Length == 0)
+            {
+                Console.WriteLine("File not found");
+                path = Console.ReadLine();
+            }
+            else
+            {
+                path = args[0];
+            }
+            
             string[] code = File.ReadAllLines(path);
             int labelCnt = 0;
+            List<string> asm = new List<string>();
 
             // Label and mnemonic conversion
             for (int i = 0; i < code.Length; i++)
             {
                 string line = code[i];
 
+                line = line.Split('#')[0];
+                //Debug.WriteLine(line);
                 // Check code for labels
                 if (line.Contains(':'))
                 {
                     Labels.Add(line.Split(':')[0], i - labelCnt);
                     labelCnt++;
                 }
-                else
+                else if (line.Length > 0)
                 {
-                    // Convert basic insn to binary
-                    Insns.Add(Mnemonics[line.Split(' ')[0]](line));
-
-                    // Increment age of registers
-                    //for (int r = 112; r <= 115; r++)
-                    //{
-                    //    if (Variables.ElementAt(r).Value.Active)
-                    //    {
-                    //        Variables.ElementAt(r).Value.LastModified++;
-                    //    }
-                    //}
+                    asm.Add(line);
                 }
             }
 
-            Insns.ForEach(o => Debug.WriteLine(Insns.IndexOf(o).ToString() + ": " + o));
+            Labels.Keys.ToList().ForEach(k => Debug.WriteLine(k));
+
+            for (int i = 0; i < asm.Count; i++)
+            {
+                string line = asm[i];
+                
+                // Convert basic insn to binary
+                try
+                {
+                    Console.WriteLine(line);
+                    Insns.Add(Mnemonics[line.Split(' ')[0]](line));
+                }
+                catch
+                {
+                    Console.WriteLine("ERROR at line " + i + ":  " + line);
+                }
+            }
+
+
+                Insns.ForEach(o => Debug.WriteLine(Insns.IndexOf(o).ToString() + ": " + o));
             Labels.ToList().ForEach(o => Debug.WriteLine(o.Key + ": " + o.Value));
+
+            path = path.Split('.')[0] + ".bin";
+
+            //if (args.Length > 1)
+            {
+                path = args[1] + path;
+            }
+            
+            File.WriteAllLines(path, Insns.ToArray());
+
+            Console.WriteLine("Success!");
+            Console.WriteLine(path);
+            return 0;
         }
 
         public static string ConvertLiteral(string radix, string value)
@@ -245,13 +277,13 @@ namespace SRISC_Assembler
 
         static string DecodeR(string r)
         {
-            switch (r)
+            return r switch
             {
-                case "1": return "01";
-                case "2": return "10";
-                case "3": return "11";
-                default: return "00";
-            }
+                "1" => "01",
+                "2" => "10",
+                "3" => "11",
+                _ => "00",
+            };
         }
     }
 

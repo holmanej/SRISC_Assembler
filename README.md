@@ -141,10 +141,10 @@ while
 ```
 
 #### Arrays
-	shorts/ints/longs*
+	shorts/ints/longs
 		stored big endian
-	strings*
-	linked lists*
+	strings
+	linked lists
 	
 ### Ideas
 * registers cache memory caches SD card

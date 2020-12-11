@@ -94,15 +94,13 @@ namespace SRISC_Assembler
             List<MemObj> registers = vars.FindAll(v => v.Location >= 112);
             List<MemObj> memory = vars.FindAll(v => v.Location <= 111);
             int regLoc = vars.Location(name);
+            bool indirect = name.Contains('[');
+            if (indirect) name = name.Substring(1, name.Length - 2);
 
             if (vars.Exists(name) && (vars.Status(name) || target))
             {
                 vars.Var(name).LastModified = 0;
-                if (regLoc >= 112)
-                {
-                    return true;    // var is here already
-                }
-                else
+                if (regLoc <= 111)
                 {
                     vars.ReserveRegister(out regLoc);   // var will be here
                     if (vars.Status(name))
@@ -113,9 +111,10 @@ namespace SRISC_Assembler
                     vars.Var(name).Location = regLoc;   // move var to registers
                     vars.Var(name).LastModified = 0;   // reset modified
                     if (target) vars.Var(name).Active = true;
-
-                    return true;
                 }
+                if (indirect) InsertIndirect(regLoc);
+
+                return true;
             }
             else
             {
@@ -123,6 +122,12 @@ namespace SRISC_Assembler
                 else Debug.WriteLine(name + " not found");
                 return false;
             }
+        }
+
+        public static void InsertIndirect(int regLoc)
+        {
+            VariableManager.Code.Add("ind r" + (regLoc - 112).ToString());  // "ind regLoc"
+            VariableManager.Code.Add("load r" + (regLoc - 112).ToString());  // "(indirect) load regLoc"
         }
 
         public static bool ReserveRegister(this List<MemObj> vars, out int loc)
@@ -418,13 +423,14 @@ namespace SRISC_Assembler
                 {
                     { "byte", "(?:byte)?\\s*" },
                     { "x", "([a-z]+)\\s*" },
-                    { "#", "(\\S?[0-9abcdef]+)\\s*" },
+                    { "[x]", "([?[a-z]+]?)\\s*" },
+                    { "#", "([dhb]?[0-9]+)\\s*" },
                     { "=", "[=]\\s*" },
-                    { "~x", "[~]" },
+                    { "~x", "[~]([a-z]+)\\s*" },
                     { "@", "(\\S+)\\s*" },
                     { "?", "(\\S+)\\s*" }
                 };
-                Regex letters = new Regex("[A-z]", RegexOptions.Compiled);
+                Regex letters = new Regex("[a-z]", RegexOptions.Compiled);
 
                 string[] parts = exp.Split(' ');
                 string pattern = "^\\s*";
@@ -435,6 +441,7 @@ namespace SRISC_Assembler
                 }
 
                 Expressions.Add(exp, new Regex(pattern, RegexOptions.Compiled | RegexOptions.IgnoreCase));
+                Debug.WriteLine(exp + "  " + Expressions[exp]);
                 return Expressions[exp];
             }
         }
