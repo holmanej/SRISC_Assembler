@@ -34,7 +34,8 @@ namespace SRISC_Assembler
             { "store", Mem },
             { "read", Mem },
             { "write", Mem },
-            { "br", Branch }
+            { "br", Branch },
+            { "exec", Exec }
         };
 
         public static Dictionary<string, string> AssignOps = new Dictionary<string, string>()
@@ -99,26 +100,31 @@ namespace SRISC_Assembler
             int labelCnt = 0;
             List<string> asm = new List<string>();
 
-            // Label and mnemonic conversion
+            // Clean out comments and white space
             for (int i = 0; i < code.Length; i++)
             {
-                string line = code[i];
-
-                line = line.Split('#')[0];
-                //Debug.WriteLine(line);
-                // Check code for labels
-                if (line.Contains(':'))
-                {
-                    Labels.Add(line.Split(':')[0], i - labelCnt);
-                    labelCnt++;
-                }
-                else if (line.Length > 0)
+                string line = code[i].Split('#')[0].Trim();
+                if (line.Length > 0)
                 {
                     asm.Add(line);
                 }
             }
 
-            Labels.Keys.ToList().ForEach(k => Debug.WriteLine(k));
+            // Label gathering
+            for (int i = 0; i < asm.Count; i++)
+            {
+                string line = asm[i];
+
+                // Check code for labels
+                if (line.Contains(':'))
+                {
+                    Labels.Add(line.Split(':')[0].Trim(), i);
+                    labelCnt++;
+                    asm.RemoveAt(i);
+                    i = 0;
+                }
+            }
+            Labels.ToList().ForEach(k => Console.WriteLine(k.Key + "  " + k.Value));  
 
             for (int i = 0; i < asm.Count; i++)
             {
@@ -127,27 +133,51 @@ namespace SRISC_Assembler
                 // Convert basic insn to binary
                 try
                 {
-                    Console.WriteLine(line);
-                    Insns.Add(Mnemonics[line.Split(' ')[0]](line));
+                    if (Mnemonics.ContainsKey(line.Split(' ')[0]))
+                    {
+                        Insns.Add(Mnemonics[line.Split(' ')[0]](line));
+                    }
+                    else
+                    {
+                        Console.WriteLine(i + " " + line + " - Incorrect syntax");
+                    }
                 }
-                catch
+                catch (Exception e)
                 {
-                    Console.WriteLine("ERROR at line " + i + ":  " + line);
+                    Console.WriteLine(i + " " + line + " - " + e.Message);
                 }
             }
 
 
-                Insns.ForEach(o => Debug.WriteLine(Insns.IndexOf(o).ToString() + ": " + o));
+            Insns.ForEach(o => Debug.WriteLine(Insns.IndexOf(o).ToString() + ": " + o));
             Labels.ToList().ForEach(o => Debug.WriteLine(o.Key + ": " + o.Value));
 
             path = path.Split('.')[0] + ".bin";
 
-            //if (args.Length > 1)
+            if (args.Length > 1)
             {
                 path = args[1] + path;
             }
-            
-            File.WriteAllLines(path, Insns.ToArray());
+
+            if (args.Length > 2)
+            {
+                if (args[2] == "guest")
+                {
+                    List<string> bin = new List<string>();
+                    foreach (string s in Insns)
+                    {
+                        bin.Add(s.Substring(4, 8));
+                        bin.Add("0000" + s.Substring(0, 4));
+                    }
+
+                    //bin.ForEach(b => Console.WriteLine(b));
+                    File.WriteAllLines(path, bin.ToArray());
+                }
+            }
+            else
+            {
+                File.WriteAllLines(path, Insns.ToArray());
+            }
 
             Console.WriteLine("Success!");
             Console.WriteLine(path);
@@ -193,8 +223,8 @@ namespace SRISC_Assembler
                 case "inv":     target = true; opsel = "0101"; break;
                 case "sll":     target = true; opsel = "0110"; break;
                 case "srl":     target = true; opsel = "0111"; break;
-                case "inc":     target = false; opsel = "1000"; break;
-                case "dec":     target = false; opsel = "1001"; break;
+                case "inc":     target = true; opsel = "1000"; break;
+                case "dec":     target = true; opsel = "1001"; break;
                 case "ind":     target = false; opsel = "1010"; break;
                 case "ult":     target = false; opsel = "1011"; break;
                 case "slt":     target = false; opsel = "1100"; break;
@@ -204,7 +234,9 @@ namespace SRISC_Assembler
             }
 
             string insn = "01";
+
             if (!target) insn += "00";
+
             string[] parts = line.Substring(line.IndexOf(' ')).Split('r');
 
             for (int i = 1; i < parts.Length; i++)
@@ -212,7 +244,7 @@ namespace SRISC_Assembler
                 string r = parts[i].Substring(0, 1);
                 insn += DecodeR(r);
             }
-
+            
             if (insn.Length < 8) insn += "00";
 
             return insn + opsel;
@@ -221,16 +253,15 @@ namespace SRISC_Assembler
         static string Mem(string line)
         {
             bool write;
-            bool io;
 
             string mnemonic = line.Split(' ')[0];
             switch (mnemonic)
             {
-                case "load":    write = false; io = false; break;
-                case "store":   write = true; io = false; break;
-                case "read":    write = false; io = true; break;
-                case "write":   write = true; io = true; break;
-                default:        write = false; io = false; break;
+                case "load":    write = false; break;
+                case "store":   write = true; break;
+                case "read":    write = false; break;
+                case "write":   write = true; break;
+                default:        write = false; break;
             }
 
             string insn = "10";
@@ -242,14 +273,29 @@ namespace SRISC_Assembler
 
             if (line.Contains(','))
             {
-                if (io)
+                string arg = line.Split(',')[1].Substring(1);
+                string id = arg.Substring(0, 1);
+                string num = arg.Substring(1);
+                int addr = id switch
                 {
-                    insn += Convert.ToString(Convert.ToByte(line.Split(',')[1].Substring(1)), 2).PadLeft(4, '0').PadLeft(7, '1');
+                    "K" => 1,
+                    "A" => 16,
+                    "T" => 32,
+                    "S" => 48,
+                    "G" => 80,
+                    "D" => 112,
+                    _ => throw new Exception("Incorrect Memory ID"),
+                };
+                if (int.TryParse(num, out int n))
+                {
+                    addr += n - 1;
                 }
                 else
                 {
-                    insn += Convert.ToString(Convert.ToByte(line.Split(',')[1].Substring(1)) + 1, 2).PadLeft(7, '0');
+                    throw new Exception("Invalid Memory Number");
                 }
+                Console.WriteLine(line + "  " + addr);
+                insn += Convert.ToString(addr, 2).PadLeft(7, '0');
             }
             else
             {
@@ -274,6 +320,8 @@ namespace SRISC_Assembler
 
             return insn;
         }
+
+        static string Exec(string line) => "111111111111";
 
         static string DecodeR(string r)
         {
