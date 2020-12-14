@@ -35,7 +35,8 @@ namespace SRISC_Assembler
             { "read", Mem },
             { "write", Mem },
             { "br", Branch },
-            { "exec", Exec }
+            { "exec", Exec },
+            { "nop", Nop }
         };
 
         public static Dictionary<string, string> AssignOps = new Dictionary<string, string>()
@@ -85,6 +86,7 @@ namespace SRISC_Assembler
                 //Debug.WriteLine(sw.Elapsed);
             }
 
+            bool success = true;
             string path;
             if (args.Length == 0)
             {
@@ -110,6 +112,14 @@ namespace SRISC_Assembler
                 }
             }
 
+            // Grab header
+            List<string> header = new List<string>();
+            int header_beg = asm.FindIndex(s => s == "{") + 1;
+            int header_len = asm.FindIndex(s => s == "}") - header_beg;
+            header.AddRange(asm.GetRange(header_beg, header_len));
+            //header.ForEach(s => Console.WriteLine(s));
+            asm.RemoveRange(0, header_len + 2);
+
             // Label gathering
             for (int i = 0; i < asm.Count; i++)
             {
@@ -123,8 +133,7 @@ namespace SRISC_Assembler
                     asm.RemoveAt(i);
                     i = 0;
                 }
-            }
-            Labels.ToList().ForEach(k => Console.WriteLine(k.Key + "  " + k.Value));  
+            }            
 
             for (int i = 0; i < asm.Count; i++)
             {
@@ -139,15 +148,30 @@ namespace SRISC_Assembler
                     }
                     else
                     {
-                        Console.WriteLine(i + " " + line + " - Incorrect syntax");
+                        Console.WriteLine(i + " " + line.Split(' ')[0] + " - Incorrect syntax");
+                        success = false;
                     }
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(i + " " + line + " - " + e.Message);
+                    success = false;
                 }
             }
 
+            List<string> program_data = new List<string>();            
+
+            for (int i = 0; i < header.Count; i++)
+            {
+                try
+                {
+                    program_data.Add(ConvertLiteral(header[i].Substring(0, 1), header[i].Substring(1)));
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(i + " " + header[i] + " - " + e.Message);
+                }
+            }
 
             Insns.ForEach(o => Debug.WriteLine(Insns.IndexOf(o).ToString() + ": " + o));
             Labels.ToList().ForEach(o => Debug.WriteLine(o.Key + ": " + o.Value));
@@ -158,6 +182,8 @@ namespace SRISC_Assembler
             {
                 path = args[1] + path;
             }
+
+            List<string> program_header = new List<string>();
 
             if (args.Length > 2)
             {
@@ -170,28 +196,48 @@ namespace SRISC_Assembler
                         bin.Add("0000" + s.Substring(0, 4));
                     }
 
-                    //bin.ForEach(b => Console.WriteLine(b));
-                    File.WriteAllLines(path, bin.ToArray());
+                    program_header.Add(Convert.ToString(bin.Count % 256, 2).PadLeft(8, '0'));
+                    program_header.Add(Convert.ToString(bin.Count / 256, 2).PadLeft(8, '0'));
+                    program_header.Add(Convert.ToString(program_data.Count % 256, 2).PadLeft(8, '0'));
+                    program_header.Add(Convert.ToString(program_data.Count / 256, 2).PadLeft(8, '0'));
+                    File.WriteAllLines(path, program_header);
+                    File.AppendAllLines(path, bin);
+                    File.AppendAllLines(path, program_data);
                 }
             }
             else
             {
-                File.WriteAllLines(path, Insns.ToArray());
+                program_header.Add(Convert.ToString(Insns.Count % 256, 2).PadLeft(12, '0'));
+                program_header.Add(Convert.ToString(Insns.Count / 256, 2).PadLeft(12, '0'));
+                program_header.Add(Convert.ToString(program_data.Count % 256, 2).PadLeft(12, '0'));
+                program_header.Add(Convert.ToString(program_data.Count / 256, 2).PadLeft(12, '0'));
+                File.WriteAllLines(path, program_header);                
+                File.AppendAllLines(path, Insns.ToArray());
+                for (int i = 0; i < program_data.Count; i++) program_data[i] = program_data[i].PadLeft(12, '0');
+                File.AppendAllLines(path, program_data);
             }
 
-            Console.WriteLine("Success!");
+            Console.WriteLine("Program Length: " + Insns.Count);
+            program_header.ForEach(s => Console.Write(s + ", "));
+            Console.WriteLine("\r\nData size: " + program_data.Count);
+            program_data.ForEach(d => Console.Write(d + ", "));
+            Console.WriteLine("\r\nLabels:");
+            Labels.ToList().ForEach(k => Console.WriteLine(k.Key + "  " + k.Value));
+            if (success) Console.WriteLine("Success!");
             Console.WriteLine(path);
             return 0;
         }
 
         public static string ConvertLiteral(string radix, string value)
         {
-            return radix switch
+            int r = radix switch
             {
-                "h" => Convert.ToString(Convert.ToInt32(value, 16), 2).PadLeft(8, '0'), // hex
-                "b" => Convert.ToString(Convert.ToInt32(value, 2), 2).PadLeft(8, '0'),  // bin
-                _ => Convert.ToString(Convert.ToInt32(value), 2).PadLeft(8, '0'),       // dec
+                "h" => 16, // hex
+                "b" => 2,  // bin
+                _ => 10,   // dec
             };
+
+            return Convert.ToString(Convert.ToByte(value, r), 2).PadLeft(8, '0');
         }
 
         static string Imm(string line)
@@ -294,7 +340,7 @@ namespace SRISC_Assembler
                 {
                     throw new Exception("Invalid Memory Number");
                 }
-                Console.WriteLine(line + "  " + addr);
+                //Console.WriteLine(line + "  " + addr);
                 insn += Convert.ToString(addr, 2).PadLeft(7, '0');
             }
             else
@@ -322,6 +368,7 @@ namespace SRISC_Assembler
         }
 
         static string Exec(string line) => "111111111111";
+        static string Nop(string line) => "010000000010";
 
         static string DecodeR(string r)
         {
